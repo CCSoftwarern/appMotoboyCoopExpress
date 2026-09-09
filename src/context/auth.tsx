@@ -37,10 +37,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   const signOut = useCallback(async () => {
+    // Plano B: limpa tokencelular no banco para não enviar notificação após logout
+    // Usa token atual para chamar RPC antes de invalidar o client
+    const currentToken = token;
+    if (currentToken) {
+      try {
+        const tempClient = createAuthedClientWithFetch(currentToken, fetch);
+        await tempClient.rpc('set_push_token', { p_token: null });
+      } catch (e) {
+        console.warn('Falha ao limpar push token no logout', e);
+      }
+    }
     setToken(null);
     setMotoboyState(null);
     await clearSession();
-  }, []);
+  }, [token]);
 
   const client = useMemo(() => {
     if (!token) return null;

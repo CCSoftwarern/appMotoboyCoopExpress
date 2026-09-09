@@ -1,8 +1,8 @@
 import Constants from 'expo-constants';
 import * as Device from 'expo-device';
 import { router } from 'expo-router';
-import { useEffect } from 'react';
-import { Platform } from 'react-native';
+import { useEffect, useRef } from 'react';
+import { AppState, Platform } from 'react-native';
 import type { Notification as ExpoNotification } from 'expo-notifications';
 
 import { useAuth } from '@/context/auth';
@@ -70,27 +70,65 @@ async function getExpoPushToken(): Promise<string | null> {
   return token.data;
 }
 
-/** Registra o token do Expo Push no banco (coluna tokencelular do motoboy). */
+/** Registra o token do Expo Push no banco (coluna tokencelular do motoboy). 
+ * Plano B robusto: registra ao logar, ao voltar para foreground e quando o token nativo muda.
+ */
 export function useRegisterPushToken() {
   const { client, motoboy } = useAuth();
+  const lastTokenRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!client || !motoboy) return;
     let cancelled = false;
 
-    (async () => {
+    const register = async (force = false) => {
       try {
         const token = await getExpoPushToken();
-        if (!cancelled && token) {
-          await atualizarPushToken(client, token);
-        }
+        if (!token) return;
+        if (!force && lastTokenRef.current === token) return;
+        lastTokenRef.current = token;
+        await atualizarPushToken(client, token);
       } catch (e) {
         console.warn('Falha ao registrar push token', e);
       }
-    })();
+    };
+
+    // registro inicial
+    void register(true);
+
+    // re-registra ao voltar para foreground (token pode ter rotacionado)
+    const appStateSub = AppState.addEventListener('change', (state) => {
+      if (state === 'active' && !cancelled) {
+        void register();
+      }
+    });
+
+    // listener de rotação do token nativo (se disponível)
+    let pushTokenSub: { remove: () => void } | null = null;
+    try {
+      const n = Notifications as unknown as {
+        addPushTokenListener?: (cb: (t: { data: string }) => void) => { remove: () => void };
+      };
+      if (n?.addPushTokenListener) {
+        pushTokenSub = n.addPushTokenListener((event) => {
+          const newToken = (event as unknown as string) ?? (event as { data: string })?.data;
+          if (typeof newToken === 'string' && newToken) {
+            void atualizarPushToken(client, newToken).catch((e) =>
+              console.warn('Falha ao atualizar token rotacionado', e),
+            );
+          } else {
+            void register(true);
+          }
+        });
+      }
+    } catch {
+      // ignora se API não existir
+    }
 
     return () => {
       cancelled = true;
+      appStateSub.remove();
+      pushTokenSub?.remove();
     };
   }, [client, motoboy]);
 }
