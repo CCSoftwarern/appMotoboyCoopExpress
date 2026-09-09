@@ -40,15 +40,20 @@ export function configureNotificationHandler() {
   });
 }
 
-async function getExpoPushToken(): Promise<string | null> {
-  if (!Notifications || !Device.isDevice) return null;
+export async function getExpoPushTokenDebug(): Promise<{ token: string | null; reason: string }> {
+  if (!Notifications) return { token: null, reason: 'Expo Go ou módulo notifications não carregado (loadNotifications null)' };
+  if (!Device.isDevice) return { token: null, reason: 'Device.isDevice=false — emulador/simulador não gera ExpoPushToken' };
 
   if (Platform.OS === 'android') {
-    await Notifications.setNotificationChannelAsync('corridas', {
-      name: 'Corridas',
-      importance: Notifications.AndroidImportance.HIGH,
-      vibrationPattern: [0, 250, 250, 250],
-    });
+    try {
+      await Notifications.setNotificationChannelAsync('corridas', {
+        name: 'Corridas',
+        importance: Notifications.AndroidImportance.HIGH,
+        vibrationPattern: [0, 250, 250, 250],
+      });
+    } catch (e) {
+      console.warn('Falha ao criar canal', e);
+    }
   }
 
   const { status: existing } = await Notifications.getPermissionsAsync();
@@ -57,17 +62,38 @@ async function getExpoPushToken(): Promise<string | null> {
     const req = await Notifications.requestPermissionsAsync();
     status = req.status;
   }
-  if (status !== 'granted') return null;
+  if (status !== 'granted') return { token: null, reason: `Permissão de notificação negada: ${status} — ative em Configurações > Apps > CoopExpress > Notificações` };
 
   const projectId =
     Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
   if (!projectId) {
-    console.warn('EAS projectId não configurado — push desativado.');
-    return null;
+    return { token: null, reason: `EAS projectId não configurado. expoConfig.extra.eas=${String(Constants.expoConfig?.extra?.eas?.projectId)} easConfig=${String(Constants.easConfig?.projectId)}` };
   }
 
-  const token = await Notifications.getExpoPushTokenAsync({ projectId });
-  return token.data;
+  try {
+    const token = await Notifications.getExpoPushTokenAsync({ projectId });
+    return { token: token.data, reason: 'ok' };
+  } catch (e) {
+    return { token: null, reason: `getExpoPushTokenAsync falhou: ${e instanceof Error ? e.message : String(e)}` };
+  }
+}
+
+async function getExpoPushToken(): Promise<string | null> {
+  const { token, reason } = await getExpoPushTokenDebug();
+  if (!token) console.warn('[push] token não obtido:', reason);
+  else console.log('[push] token obtido:', token.slice(0, 25) + '...');
+  return token;
+}
+
+export async function registerPushTokenNow(client: import('@supabase/supabase-js').SupabaseClient): Promise<{ ok: boolean; token?: string; reason: string }> {
+  const { token, reason } = await getExpoPushTokenDebug();
+  if (!token) return { ok: false, reason };
+  try {
+    await atualizarPushToken(client, token);
+    return { ok: true, token, reason: 'ok' };
+  } catch (e) {
+    return { ok: false, reason: `RPC falhou: ${e instanceof Error ? e.message : String(e)}` };
+  }
 }
 
 /** Registra o token do Expo Push no banco (coluna tokencelular do motoboy). 

@@ -1,10 +1,12 @@
 import { Alert, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
+import { useState } from 'react';
 
 import { Button, Card } from '@/components/ui';
 import { useAuth } from '@/context/auth';
 import { Colors, Fonts, Radius, Spacing } from '@/theme';
+import { getExpoPushTokenDebug, registerPushTokenNow } from '@/hooks/usePush';
 
 function initials(nome: string): string {
   return nome
@@ -16,13 +18,45 @@ function initials(nome: string): string {
 }
 
 export default function ProfileScreen() {
-  const { motoboy, signOut } = useAuth();
+  const { motoboy, signOut, client } = useAuth();
+  const [pushStatus, setPushStatus] = useState<string | null>(null);
+  const [pushLoading, setPushLoading] = useState(false);
 
   const onLogout = () => {
     Alert.alert('Sair do aplicativo', 'Tem certeza que deseja sair?', [
       { text: 'Cancelar', style: 'cancel' },
       { text: 'Sair', style: 'destructive', onPress: () => void signOut() },
     ]);
+  };
+
+  const onTestPush = async () => {
+    if (!client) {
+      Alert.alert('Não autenticado', 'Faça login novamente.');
+      return;
+    }
+    setPushLoading(true);
+    try {
+      const dbg = await getExpoPushTokenDebug();
+      if (!dbg.token) {
+        setPushStatus(`Falha: ${dbg.reason}`);
+        Alert.alert('Push — diagnóstico', dbg.reason);
+        return;
+      }
+      const res = await registerPushTokenNow(client);
+      if (res.ok) {
+        setPushStatus(`OK: ${res.token?.slice(0, 30)}...`);
+        Alert.alert('Push sincronizado', `Token salvo no banco:\n${res.token}`);
+      } else {
+        setPushStatus(`Erro RPC: ${res.reason}`);
+        Alert.alert('Falha ao salvar', res.reason);
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setPushStatus(`Erro: ${msg}`);
+      Alert.alert('Erro', msg);
+    } finally {
+      setPushLoading(false);
+    }
   };
 
   return (
@@ -59,6 +93,26 @@ export default function ProfileScreen() {
             <Text style={styles.rowValue}>{motoboy?.codigo_pix ?? 'Não cadastrada'}</Text>
           </View>
         </View>
+      </Card>
+
+      <Card style={styles.pushCard}>
+        <View style={styles.row}>
+          <MaterialIcons name="notifications-active" size={20} color={Colors.primary} />
+          <View style={styles.rowInfo}>
+            <Text style={styles.rowLabel}>Notificações push</Text>
+            <Text style={styles.rowValueSmall} numberOfLines={2}>
+              {pushStatus ?? 'Toque em sincronizar para testar'}
+            </Text>
+          </View>
+        </View>
+        <Button
+          label="Sincronizar notificações"
+          variant="outline"
+          loading={pushLoading}
+          onPress={onTestPush}
+          style={styles.pushBtn}
+        />
+        <Text style={styles.pushHint}>Se negar permissão, ative em Configurações do Android.</Text>
       </Card>
 
       <Button
@@ -149,5 +203,21 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.textMuted,
     marginTop: Spacing.lg,
+  },
+  pushCard: {
+    marginHorizontal: Spacing.md,
+  },
+  rowValueSmall: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+  },
+  pushBtn: {
+    marginTop: Spacing.md,
+  },
+  pushHint: {
+    fontSize: 11,
+    color: Colors.textMuted,
+    textAlign: 'center',
+    marginTop: Spacing.xs,
   },
 });
