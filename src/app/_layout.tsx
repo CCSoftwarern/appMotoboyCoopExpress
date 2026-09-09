@@ -1,18 +1,65 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router';
-import * as SplashScreen from 'expo-splash-screen';
-import { useColorScheme } from 'react-native';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { Stack } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import { ActivityIndicator, View } from 'react-native';
 
-import { AnimatedSplashOverlay } from '@/components/animated-icon';
-import AppTabs from '@/components/app-tabs';
+import { AuthProvider, useAuth } from '@/context/auth';
+import {
+  configureNotificationHandler,
+  useNotificationNavigation,
+  useRegisterPushToken,
+} from '@/hooks/usePush';
+import { Colors } from '@/theme';
 
-SplashScreen.preventAutoHideAsync();
+configureNotificationHandler();
 
-export default function TabLayout() {
-  const colorScheme = useColorScheme();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 10_000,
+      retry: 1,
+    },
+  },
+});
+
+function AppGate() {
+  useRegisterPushToken();
+  useNotificationNavigation();
+
+  const { motoboy, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+        <ActivityIndicator size="large" color={Colors.primary} />
+      </View>
+    );
+  }
+
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <AnimatedSplashOverlay />
-      <AppTabs />
-    </ThemeProvider>
+    <Stack
+      screenOptions={{
+        headerShown: false,
+        contentStyle: { backgroundColor: Colors.background },
+      }}>
+      <Stack.Protected guard={!!motoboy}>
+        <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="entrega/[id]" />
+      </Stack.Protected>
+      <Stack.Protected guard={!motoboy}>
+        <Stack.Screen name="(auth)" />
+      </Stack.Protected>
+    </Stack>
+  );
+}
+
+export default function RootLayout() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <StatusBar style="dark" />
+        <AppGate />
+      </AuthProvider>
+    </QueryClientProvider>
   );
 }
