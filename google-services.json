@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "568110445430",
+    "project_id": "coopexpress-motoboy",
+    "storage_bucket": "coopexpress-motoboy.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:568110445430:android:347e2894d881ee93f08057",
+        "android_client_info": {
+          "package_name": "com.coopexpress.motoboy"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAbIrEiWJQZKPxNta4x8b9JW5yALCPW1LU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
