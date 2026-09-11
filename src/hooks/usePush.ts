@@ -74,14 +74,25 @@ export async function getExpoPushTokenDebug(): Promise<{ token: string | null; r
     const token = await Notifications.getExpoPushTokenAsync({ projectId });
     return { token: token.data, reason: 'ok' };
   } catch (e) {
-    return { token: null, reason: `getExpoPushTokenAsync falhou: ${e instanceof Error ? e.message : String(e)}` };
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg.includes('googleServicesFile') || msg.includes('FirebaseApp') || msg.includes('Firebase Messaging')) {
+      return {
+        token: null,
+        reason:
+          'FCM não configurado — notificações push desabilitadas. Para ativar: crie um projeto Firebase para o package com.coopexpress.motoboy, baixe google-services.json e configure app.json > expo.android.googleServicesFile = "./google-services.json" (Expo Docs: https://docs.expo.dev/push-notifications/fcm-credentials/). O app funciona normalmente sem push.',
+      };
+    }
+    return { token: null, reason: `getExpoPushTokenAsync falhou: ${msg}` };
   }
 }
 
 async function getExpoPushToken(): Promise<string | null> {
   const { token, reason } = await getExpoPushTokenDebug();
-  if (!token) console.warn('[push] token não obtido:', reason);
-  else console.log('[push] token obtido:', token.slice(0, 25) + '...');
+  if (!token) {
+    // FCM não configurado é esperado em preview sem google-services.json — não polui log como erro
+    if (reason.includes('FCM não configurado')) console.log('[push] desabilitado:', reason);
+    else console.warn('[push] token não obtido:', reason);
+  } else console.log('[push] token obtido:', token.slice(0, 25) + '...');
   return token;
 }
 
