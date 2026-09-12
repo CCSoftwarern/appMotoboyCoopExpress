@@ -104,30 +104,44 @@ export async function fetchEntrega(
       entrega.id_forma_pgto != null ? (FORMA_PGTO[entrega.id_forma_pgto] ?? null) : null,
   };
 
+  // Paraleliza buscas dependentes (antes eram sequenciais → 2x RTT)
+  const promises: PromiseLike<void>[] = [];
+
   if (entrega.id_pessoa) {
-    const { data: pessoa, error: pessoaErr } = await client
-      .from('pessoa')
-      .select('nome,celular,endereco,numero,complemento,bairro,cep,cidade,estado')
-      .eq('idpessoa', entrega.id_pessoa)
-      .maybeSingle();
-    if (!pessoaErr && pessoa) {
-      detalhe.cliente_nome = pessoa.nome ?? null;
-      detalhe.cliente_telefone = pessoa.celular ?? null;
-      detalhe.cliente_endereco =
-        formatEnderecoCadastro(pessoa) || entrega.endereco_cliente;
-    }
+    promises.push(
+      client
+        .from('pessoa')
+        .select('nome,celular,endereco,numero,complemento,bairro,cep,cidade,estado')
+        .eq('idpessoa', entrega.id_pessoa)
+        .maybeSingle()
+        .then(({ data: pessoa, error: pessoaErr }) => {
+          if (!pessoaErr && pessoa) {
+            detalhe.cliente_nome = pessoa.nome ?? null;
+            detalhe.cliente_telefone = pessoa.celular ?? null;
+            detalhe.cliente_endereco =
+              formatEnderecoCadastro(pessoa as Parameters<typeof formatEnderecoCadastro>[0]) ||
+              entrega.endereco_cliente;
+          }
+        }),
+    );
   }
 
   if (entrega.id_usuario) {
-    const { data: operador, error: operadorErr } = await client
-      .from('usuarios_publicos')
-      .select('id,username')
-      .eq('id', entrega.id_usuario)
-      .maybeSingle();
-    if (!operadorErr && operador) {
-      detalhe.operador_nome = operador.username ?? null;
-    }
+    promises.push(
+      client
+        .from('usuarios_publicos')
+        .select('id,username')
+        .eq('id', entrega.id_usuario)
+        .maybeSingle()
+        .then(({ data: operador, error: operadorErr }) => {
+          if (!operadorErr && operador) {
+            detalhe.operador_nome = (operador as { username: string | null }).username ?? null;
+          }
+        }),
+    );
   }
+
+  if (promises.length) await Promise.all(promises);
 
   return detalhe;
 }

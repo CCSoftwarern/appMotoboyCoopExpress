@@ -56,11 +56,49 @@ export function useHistorico() {
 
 export function useEntrega(id: number) {
   const { client } = useAuth();
+  const queryClient = useQueryClient();
   return useQuery({
     queryKey: keys.detalhe(id),
     queryFn: () => fetchEntrega(client!, id),
     enabled: !!client && id > 0,
+    // Usa entrega da lista como placeholder para abrir instantaneamente
+    placeholderData: () => {
+      const listas = [
+        queryClient.getQueryData<Entrega[]>(keys.disponiveis),
+        queryClient.getQueryData<Entrega[]>(keys.ativas),
+        queryClient.getQueryData<Entrega[]>(keys.historico),
+      ];
+      for (const lista of listas) {
+        const found = lista?.find((e) => e.id === id);
+        if (found) {
+          return {
+            ...found,
+            cliente_nome: null,
+            cliente_telefone: null,
+            cliente_endereco: null,
+            operador_nome: null,
+            forma_pagamento: null,
+          } as import('@/lib/types').EntregaDetalhe;
+        }
+      }
+      return undefined;
+    },
+    staleTime: 15_000,
+    gcTime: 5 * 60_000,
   });
+}
+
+export function usePrefetchEntrega() {
+  const { client } = useAuth();
+  const queryClient = useQueryClient();
+  return (id: number) => {
+    if (!client || !id) return;
+    void queryClient.prefetchQuery({
+      queryKey: keys.detalhe(id),
+      queryFn: () => fetchEntrega(client, id),
+      staleTime: 15_000,
+    });
+  };
 }
 
 /** Assina mudanças em `entregas` (realtime) e invalida as queries de corridas. */

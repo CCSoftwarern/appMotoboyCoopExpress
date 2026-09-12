@@ -15,6 +15,7 @@ import {
   useAtivas,
   useDisponiveis,
   useHistorico,
+  usePrefetchEntrega,
   useRealtimeCorridas,
 } from '@/hooks/useCorridas';
 import { Colors, Fonts, Spacing } from '@/theme';
@@ -37,6 +38,7 @@ export default function CorridasScreen() {
   }, [ativas, disponiveis, historico]);
 
   const loading = ativas.isLoading || disponiveis.isLoading || historico.isLoading;
+  const prefetch = usePrefetchEntrega();
 
   const open = (id: number) => router.push(`/entrega/${id}` as never);
 
@@ -60,7 +62,7 @@ export default function CorridasScreen() {
           <SectionTitle>Em andamento</SectionTitle>
           {ativas.data?.length ? (
             ativas.data.map((e) => (
-              <DeliveryCard key={e.id} entrega={e} highlight onPress={() => open(e.id)} />
+              <DeliveryCard key={e.id} entrega={e} highlight onPress={() => open(e.id)} onPressIn={() => prefetch(e.id)} onHoverIn={() => prefetch(e.id)} />
             ))
           ) : (
             <EmptyState
@@ -72,7 +74,7 @@ export default function CorridasScreen() {
           <SectionTitle>Disponíveis</SectionTitle>
           {disponiveis.data?.length ? (
             disponiveis.data.map((e) => (
-              <DeliveryCard key={e.id} entrega={e} onPress={() => open(e.id)} />
+              <DeliveryCard key={e.id} entrega={e} onPress={() => open(e.id)} onPressIn={() => prefetch(e.id)} onHoverIn={() => prefetch(e.id)} />
             ))
           ) : (
             <EmptyState
@@ -84,7 +86,7 @@ export default function CorridasScreen() {
           <SectionTitle>Histórico</SectionTitle>
           {historico.data?.length ? (
             historico.data.slice(0, 10).map((e) => (
-              <DeliveryCard key={e.id} entrega={e} onPress={() => open(e.id)} />
+              <DeliveryCard key={e.id} entrega={e} onPress={() => open(e.id)} onPressIn={() => prefetch(e.id)} onHoverIn={() => prefetch(e.id)} />
             ))
           ) : (
             <EmptyState title="Sem entregas finalizadas ainda" />

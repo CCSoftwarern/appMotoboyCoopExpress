@@ -9,15 +9,19 @@ import { Colors, Fonts, Radius, Spacing } from '@/theme';
 interface Props {
   entrega: Entrega;
   onPress?: () => void;
+  onPressIn?: () => void;
+  onHoverIn?: () => void;
   highlight?: boolean;
 }
 
-export function DeliveryCard({ entrega, onPress, highlight }: Props) {
+export function DeliveryCard({ entrega, onPress, onPressIn, onHoverIn, highlight }: Props) {
   const status = statusEntrega(entrega.status);
 
   return (
     <Pressable
       onPress={onPress}
+      onPressIn={onPressIn}
+      onHoverIn={onHoverIn as never}
       style={({ pressed }) => [
         styles.card,
         highlight && styles.cardHighlight,
