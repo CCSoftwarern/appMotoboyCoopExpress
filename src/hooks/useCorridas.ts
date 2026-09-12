@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
+import { AppState } from 'react-native';
 
 import { useAuth } from '@/context/auth';
 import {
@@ -27,7 +28,11 @@ export function useDisponiveis() {
     queryKey: keys.disponiveis,
     queryFn: () => fetchDisponiveis(client!),
     enabled: !!client,
-    refetchInterval: 30_000,
+    refetchInterval: 10_000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+    staleTime: 5_000,
   });
 }
 
@@ -40,7 +45,11 @@ export function useAtivas() {
       return list;
     },
     enabled: !!client && !!motoboy,
-    refetchInterval: 30_000,
+    refetchInterval: 10_000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+    staleTime: 5_000,
   });
 }
 
@@ -50,7 +59,9 @@ export function useHistorico() {
     queryKey: keys.historico,
     queryFn: () => fetchHistorico(client!, motoboy!.id),
     enabled: !!client && !!motoboy,
-    refetchInterval: 30_000,
+    refetchInterval: 15_000,
+    refetchOnWindowFocus: true,
+    staleTime: 10_000,
   });
 }
 
@@ -101,7 +112,10 @@ export function usePrefetchEntrega() {
   };
 }
 
-/** Assina mudanças em `entregas` (realtime) e invalida as queries de corridas. */
+/** Assina mudanças em `entregas` (realtime) e invalida as queries de corridas.
+ * Antes: só INSERT S + * onde id_motoqueiro=motoboy → UPDATE S→P (despacho) não chegava rápido.
+ * Agora: escuta ampla em entregas (sem filtro) + filtros específicos, debounce 300ms, + refetch no foreground.
+ */
 export function useRealtimeCorridas() {
   const { client, motoboy } = useAuth();
   const queryClient = useQueryClient();
@@ -109,36 +123,45 @@ export function useRealtimeCorridas() {
   useEffect(() => {
     if (!client || !motoboy) return;
 
+    let timeout: ReturnType<typeof setTimeout> | null = null;
     const invalidate = () => {
-      void queryClient.invalidateQueries({ queryKey: ['entregas'] });
+      if (timeout) clearTimeout(timeout);
+      timeout = setTimeout(() => {
+        void queryClient.invalidateQueries({ queryKey: ['entregas'] });
+        // detalhe aberto também atualiza
+        void queryClient.invalidateQueries({ queryKey: ['entregas', 'detalhe'] });
+      }, 300);
     };
 
     const channel = client
-      .channel('corridas-realtime')
+      .channel(`corridas-realtime-${motoboy.id}`)
       .on(
         'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'entregas',
-          filter: `id_motoqueiro=eq.${motoboy.id}`,
+        { event: '*', schema: 'public', table: 'entregas' },
+        (payload) => {
+          const row = payload.new as Record<string, unknown> | null;
+          const oldRow = payload.old as Record<string, unknown> | null;
+          const isMine =
+            row?.id_motoqueiro === motoboy.id || oldRow?.id_motoqueiro === motoboy.id;
+          const isDisponivel = row?.status === 'S' || oldRow?.status === 'S';
+          if (isMine || isDisponivel) invalidate();
         },
-        invalidate,
       )
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'entregas',
-          filter: 'status=eq.S',
-        },
-        invalidate,
-      )
-      .subscribe();
+      .subscribe((status) => {
+        // fallback: se realtime falhar, força polling mais agressivo já configurado (10s)
+        if (status !== 'SUBSCRIBED') console.warn('[realtime] status', status);
+      });
+
+    const onFocus = () => invalidate();
+    // React Native AppState já usado em usePush, aqui usa focus do query
+    const sub = AppState.addEventListener?.('change', (s) => {
+      if (s === 'active') onFocus();
+    });
 
     return () => {
+      if (timeout) clearTimeout(timeout);
       void client.removeChannel(channel);
+      sub?.remove?.();
     };
   }, [client, motoboy, queryClient]);
 }
