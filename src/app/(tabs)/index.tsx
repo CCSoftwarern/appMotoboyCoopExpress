@@ -14,6 +14,7 @@ import { EmptyState, Loading, SectionTitle } from '@/components/ui';
 import {
   useAtivas,
   useDisponiveis,
+  useEntregasMotoboyHoje,
   useHistorico,
   usePrefetchEntrega,
   useRealtimeCorridas,
@@ -27,17 +28,19 @@ export default function CorridasScreen() {
   const ativas = useAtivas();
   const disponiveis = useDisponiveis();
   const historico = useHistorico();
+  const hojeRpc = useEntregasMotoboyHoje();
 
   const refreshing =
-    ativas.isFetching || disponiveis.isFetching || historico.isFetching;
+    ativas.isFetching || disponiveis.isFetching || historico.isFetching || hojeRpc.isFetching;
 
   const onRefresh = useCallback(() => {
     void ativas.refetch();
     void disponiveis.refetch();
     void historico.refetch();
-  }, [ativas, disponiveis, historico]);
+    void hojeRpc.refetch();
+  }, [ativas, disponiveis, historico, hojeRpc]);
 
-  const loading = ativas.isLoading || disponiveis.isLoading || historico.isLoading;
+  const loading = ativas.isLoading || disponiveis.isLoading || historico.isLoading || hojeRpc.isLoading;
   const prefetch = usePrefetchEntrega();
 
   const open = (id: number) => router.push(`/entrega/${id}` as never);
@@ -59,6 +62,18 @@ export default function CorridasScreen() {
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
           }>
+          <SectionTitle>Minhas de Hoje (RPC)</SectionTitle>
+          {hojeRpc.data?.length ? (
+            hojeRpc.data.map((e) => (
+              <DeliveryCard key={e.id} entrega={e} highlight onPress={() => open(e.id)} onPressIn={() => prefetch(e.id)} onHoverIn={() => prefetch(e.id)} />
+            ))
+          ) : (
+            <EmptyState
+              title={hojeRpc.isLoading ? 'Carregando...' : 'Nenhuma entrega hoje'}
+              subtitle="Entregas do RPC entregas_motoboy_hoje (já com cliente/operador)."
+            />
+          )}
+
           <SectionTitle>Em andamento</SectionTitle>
           {ativas.data?.length ? (
             ativas.data.map((e) => (

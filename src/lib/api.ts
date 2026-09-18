@@ -61,6 +61,85 @@ const FORMA_PGTO: Record<number, string> = {
   3: 'Comanda',
 };
 
+// RPC entregas_motoboy_hoje já traz join com pessoa/usuarios/motoboys (1 RTT)
+// Usado para lista e detalhe reaproveitado (sem N+1)
+export interface EntregasMotoboyHojeRow {
+  id: number;
+  id_pessoa: number | null;
+  nome_cliente: string | null;
+  endereco_retirada: string | null;
+  endereco_entrega: string | null;
+  vr_calculado: number | null;
+  id_forma_pgto: number | null;
+  descricao: string | null;
+  dt_cadastro: string | null;
+  operador: string | null;
+  status: string | null;
+  motoboy_nome: string | null;
+  foto: string | null;
+  celular: string | null;
+  endereco_cliente: string | null;
+  // campos extras que a RPC pode retornar conforme evolução
+  [k: string]: unknown;
+}
+
+function mapRpcToDetalhe(row: EntregasMotoboyHojeRow, fallback?: Partial<Entrega>): EntregaDetalhe {
+  const base = (fallback ?? {}) as Entrega;
+  return {
+    // campos base de Entrega (mantém fallback quando RPC não traz)
+    id: row.id,
+    id_tipo_produto: (base as Entrega).id_tipo_produto ?? null,
+    id_pessoa: row.id_pessoa ?? (base as Entrega).id_pessoa ?? null,
+    id_motoqueiro: (base as Entrega).id_motoqueiro ?? null,
+    dt_cadastro: row.dt_cadastro ?? (base as Entrega).dt_cadastro ?? null,
+    dt_saida: (base as Entrega).dt_saida ?? null,
+    dt_entrega: (base as Entrega).dt_entrega ?? null,
+    endereco_retirada: row.endereco_retirada ?? (base as Entrega).endereco_retirada ?? null,
+    endereco_entrega: row.endereco_entrega ?? (base as Entrega).endereco_entrega ?? null,
+    descricao: row.descricao ?? (base as Entrega).descricao ?? null,
+    distancia: (base as Entrega).distancia ?? null,
+    distancia_txt: (base as Entrega).distancia_txt ?? null,
+    vr_calculado: row.vr_calculado ?? (base as Entrega).vr_calculado ?? null,
+    vr_por_metro: (base as Entrega).vr_por_metro ?? null,
+    status: (row.status as Entrega['status']) ?? (base as Entrega).status ?? null,
+    id_forma_pgto: row.id_forma_pgto ?? (base as Entrega).id_forma_pgto ?? null,
+    id_empresa: (base as Entrega).id_empresa ?? null,
+    id_usuario_encerramento: (base as Entrega).id_usuario_encerramento ?? null,
+    id_usuario_inclusao: (base as Entrega).id_usuario_inclusao ?? null,
+    cod_transacao: (base as Entrega).cod_transacao ?? null,
+    bairro_entrega: (base as Entrega).bairro_entrega ?? null,
+    transacao_guid: (base as Entrega).transacao_guid ?? null,
+    endereco_cliente: (row.endereco_cliente as string | null) ?? (base as Entrega).endereco_cliente ?? null,
+    anotacao: (base as Entrega).anotacao ?? null,
+    id_usuario_encaminhamento: (base as Entrega).id_usuario_encaminhamento ?? null,
+    transferido: (base as Entrega).transferido ?? null,
+    st_icon: (base as Entrega).st_icon ?? null,
+    assinatura_url: (base as Entrega).assinatura_url ?? null,
+    id_usuario: (base as Entrega).id_usuario ?? null,
+    uuid_motoboy: (base as Entrega).uuid_motoboy ?? null,
+    entrega_json: (base as Entrega).entrega_json ?? null,
+    // enriquecimentos vindos da RPC
+    cliente_nome: row.nome_cliente ?? null,
+    cliente_telefone: row.celular ?? null,
+    cliente_endereco: row.endereco_cliente ?? null,
+    operador_nome: row.operador ?? null,
+    forma_pagamento:
+      row.id_forma_pgto != null ? (FORMA_PGTO[row.id_forma_pgto as number] ?? null) : null,
+  } as EntregaDetalhe;
+}
+
+export async function fetchEntregasMotoboyHoje(
+  client: SupabaseClient,
+  idMotoboy: number,
+): Promise<EntregaDetalhe[]> {
+  const { data, error } = await client.rpc('entregas_motoboy_hoje', {
+    p_id_motoboy: idMotoboy,
+  });
+  if (error) throw error;
+  const rows = (data ?? []) as EntregasMotoboyHojeRow[];
+  return rows.map((r) => mapRpcToDetalhe(r));
+}
+
 function formatEnderecoCadastro(p: {
   endereco: string | null;
   numero: number | null;

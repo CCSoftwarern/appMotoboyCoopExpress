@@ -9,16 +9,18 @@ import {
   fetchAtivas,
   fetchDisponiveis,
   fetchEntrega,
+  fetchEntregasMotoboyHoje,
   fetchHistorico,
   iniciarEntrega,
   recusarEntrega,
 } from '@/lib/api';
-import { Entrega } from '@/lib/types';
+import { Entrega, EntregaDetalhe } from '@/lib/types';
 
 const keys = {
   disponiveis: ['entregas', 'disponiveis'] as const,
   ativas: ['entregas', 'ativas'] as const,
   historico: ['entregas', 'historico'] as const,
+  hoje: (idMotoboy: number) => ['entregas', 'hoje', idMotoboy] as const,
   detalhe: (id: number) => ['entregas', 'detalhe', id] as const,
 };
 
@@ -65,15 +67,35 @@ export function useHistorico() {
   });
 }
 
+export function useEntregasMotoboyHoje() {
+  const { client, motoboy } = useAuth();
+  return useQuery({
+    queryKey: keys.hoje(motoboy?.id ?? 0),
+    queryFn: () => fetchEntregasMotoboyHoje(client!, motoboy!.id),
+    enabled: !!client && !!motoboy,
+    refetchInterval: 10_000,
+    refetchOnWindowFocus: true,
+    staleTime: 5_000,
+  });
+}
+
 export function useEntrega(id: number) {
-  const { client } = useAuth();
+  const { client, motoboy } = useAuth();
   const queryClient = useQueryClient();
   return useQuery({
     queryKey: keys.detalhe(id),
     queryFn: () => fetchEntrega(client!, id),
     enabled: !!client && id > 0,
-    // Usa entrega da lista como placeholder para abrir instantaneamente
+    // Detalhe reaproveita RPC entregas_motoboy_hoje (já traz cliente/operador) → abertura instantânea
     placeholderData: () => {
+      // 1) tenta cache do detalhe já buscado
+      // 2) tenta lista Hoje (RPC) que já tem detalhe completo
+      // 3) fallback para listas antigas (sem cliente enriquecido)
+      if (motoboy) {
+        const hoje = queryClient.getQueryData<EntregaDetalhe[]>(keys.hoje(motoboy.id));
+        const foundHoje = hoje?.find((e) => e.id === id);
+        if (foundHoje) return foundHoje;
+      }
       const listas = [
         queryClient.getQueryData<Entrega[]>(keys.disponiveis),
         queryClient.getQueryData<Entrega[]>(keys.ativas),
@@ -89,7 +111,7 @@ export function useEntrega(id: number) {
             cliente_endereco: null,
             operador_nome: null,
             forma_pagamento: null,
-          } as import('@/lib/types').EntregaDetalhe;
+          } as EntregaDetalhe;
         }
       }
       return undefined;
@@ -100,10 +122,15 @@ export function useEntrega(id: number) {
 }
 
 export function usePrefetchEntrega() {
-  const { client } = useAuth();
+  const { client, motoboy } = useAuth();
   const queryClient = useQueryClient();
   return (id: number) => {
     if (!client || !id) return;
+    // se já está no cache Hoje, não precisa prefetch
+    if (motoboy) {
+      const hoje = queryClient.getQueryData<EntregaDetalhe[]>(keys.hoje(motoboy.id));
+      if (hoje?.some((e) => e.id === id)) return;
+    }
     void queryClient.prefetchQuery({
       queryKey: keys.detalhe(id),
       queryFn: () => fetchEntrega(client, id),
