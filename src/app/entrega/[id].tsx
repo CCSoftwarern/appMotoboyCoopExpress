@@ -112,22 +112,30 @@ export default function EntregaDetailScreen() {
   };
 
   const onConfirmarProva = async (result: ProvaResult) => {
-    if (!client || !result.arquivoUri) return;
+    if (!client) return;
+    // sem_prova permite encerrar sem arquivo
+    if (result.tipo !== 'sem_prova' && !result.arquivoUri) return;
     setProvaSubmitting(true);
     try {
-      const publicUrl = await uploadProva(client, id, result.tipo, result.arquivoUri);
+      // Otimização: se sem_prova, pula upload (muito mais rápido)
+      let publicUrl: string | null = null;
+      if (result.tipo !== 'sem_prova' && result.arquivoUri) {
+        publicUrl = await uploadProva(client, id, result.tipo as 'assinatura' | 'foto', result.arquivoUri);
+      }
       await finalizarEntrega(client, {
         id,
-        tipo: result.tipo,
+        tipo: result.tipo as 'assinatura' | 'foto' | 'sem_prova',
         arquivoUrl: publicUrl,
         nomeRecebedor: result.nomeRecebedor,
         lat: result.lat,
         lng: result.lng,
       });
       setProvaVisible(false);
-      await queryClient.invalidateQueries({ queryKey: ['entregas'] });
-      await queryClient.invalidateQueries({ queryKey: ['wallet'] });
-      Alert.alert('Entrega concluída', 'Comissão creditada na sua carteira.');
+      // invalidação otimista paralela, sem await sequencial
+      void queryClient.invalidateQueries({ queryKey: ['entregas'] });
+      void queryClient.invalidateQueries({ queryKey: ['wallet'] });
+      void queryClient.invalidateQueries({ queryKey: ['entregas', 'detalhe', id] });
+      Alert.alert('Entrega concluída', result.tipo === 'sem_prova' ? 'Entrega finalizada sem prova.' : 'Comissão creditada na sua carteira.');
     } catch (e) {
       Alert.alert('Erro', e instanceof Error ? e.message : 'Não foi possível concluir.');
     } finally {

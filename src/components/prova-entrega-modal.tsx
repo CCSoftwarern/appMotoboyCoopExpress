@@ -16,7 +16,7 @@ import { Button } from '@/components/ui';
 import { Colors, Fonts, Radius, Spacing } from '@/theme';
 
 export interface ProvaResult {
-  tipo: 'assinatura' | 'foto';
+  tipo: 'assinatura' | 'foto' | 'sem_prova';
   arquivoUri: string | null;
   nomeRecebedor: string | null;
   lat: number | null;
@@ -31,7 +31,7 @@ interface Props {
 }
 
 export function ProvaEntregaModal({ visible, onClose, onSubmit, submitting }: Props) {
-  const [modo, setModo] = useState<'assinatura' | 'foto'>('assinatura');
+  const [modo, setModo] = useState<'assinatura' | 'foto' | 'sem_prova'>('assinatura');
   const [fotoUri, setFotoUri] = useState<string | null>(null);
   const [nome, setNome] = useState('');
   const signatureRef = useRef<SignaturePadHandle>(null);
@@ -72,15 +72,22 @@ export function ProvaEntregaModal({ visible, onClose, onSubmit, submitting }: Pr
     let uri: string | null = null;
     if (modo === 'assinatura') {
       uri = await signatureRef.current?.getSignature() ?? null;
-      if (!uri) return;
-    } else if (fotoUri) {
+      // agora opcional: se não houver assinatura, permite sem_prova
+      if (!uri) {
+        // trata como sem_prova se usuário não desenhou
+        onSubmitSemProva();
+        return;
+      }
+    } else if (modo === 'foto' && fotoUri) {
       uri = fotoUri;
+    } else if (modo === 'sem_prova') {
+      uri = null;
     }
 
     let lat: number | null = null;
     let lng: number | null = null;
     try {
-      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Low });
       lat = loc.coords.latitude;
       lng = loc.coords.longitude;
     } catch {
@@ -88,8 +95,25 @@ export function ProvaEntregaModal({ visible, onClose, onSubmit, submitting }: Pr
     }
 
     onSubmit({
-      tipo: modo,
+      tipo: modo === 'sem_prova' ? 'sem_prova' : modo,
       arquivoUri: uri,
+      nomeRecebedor: nome.trim() || null,
+      lat,
+      lng,
+    });
+  };
+
+  const onSubmitSemProva = async () => {
+    let lat: number | null = null;
+    let lng: number | null = null;
+    try {
+      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Low });
+      lat = loc.coords.latitude;
+      lng = loc.coords.longitude;
+    } catch {}
+    onSubmit({
+      tipo: 'sem_prova',
+      arquivoUri: null,
       nomeRecebedor: nome.trim() || null,
       lat,
       lng,
@@ -137,6 +161,18 @@ export function ProvaEntregaModal({ visible, onClose, onSubmit, submitting }: Pr
                 style={styles.segmentButton}
               />
             </View>
+            <View style={[styles.segmentItem, modo === 'sem_prova' && styles.segmentItemActive]}>
+              <Text
+                style={[styles.segmentLabel, modo === 'sem_prova' && styles.segmentLabelActive]}>
+                Sem prova
+              </Text>
+              <Button
+                label="Sem prova"
+                variant={modo === 'sem_prova' ? 'primary' : 'ghost'}
+                onPress={() => setModo('sem_prova')}
+                style={styles.segmentButton}
+              />
+            </View>
           </View>
 
           {modo === 'assinatura' ? (
@@ -148,7 +184,7 @@ export function ProvaEntregaModal({ visible, onClose, onSubmit, submitting }: Pr
                 onPress={() => signatureRef.current?.clear()}
               />
             </View>
-          ) : (
+          ) : modo === 'foto' ? (
             <View style={styles.fotoArea}>
               {fotoUri ? (
                 <Image source={{ uri: fotoUri }} style={styles.fotoPreview} />
@@ -158,6 +194,11 @@ export function ProvaEntregaModal({ visible, onClose, onSubmit, submitting }: Pr
                   <Text style={styles.fotoHint}>Tire uma foto do destinatário/pacote</Text>
                 </View>
               )}
+            </View>
+          ) : (
+            <View style={styles.fotoPlaceholder}>
+              <MaterialIcons name="check" size={40} color={Colors.primary} />
+              <Text style={styles.fotoHint}>Entrega será finalizada sem assinatura/foto</Text>
             </View>
           )}
 
@@ -173,7 +214,7 @@ export function ProvaEntregaModal({ visible, onClose, onSubmit, submitting }: Pr
           <View style={styles.actions}>
             <Button label="Cancelar" variant="ghost" onPress={reset} disabled={submitting} />
             <Button
-              label="Confirmar entrega"
+              label={modo === 'sem_prova' ? 'Finalizar sem prova' : 'Confirmar entrega'}
               loading={submitting}
               disabled={modo === 'foto' && !fotoUri}
               onPress={confirmar}
