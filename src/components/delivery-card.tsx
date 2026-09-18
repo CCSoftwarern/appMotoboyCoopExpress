@@ -2,12 +2,12 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 
 import { Badge } from '@/components/ui';
-import { formatCurrency, statusEntrega } from '@/lib/format';
-import { Entrega } from '@/lib/types';
+import { formatCurrency, formatDataHoraCard, statusEntrega } from '@/lib/format';
+import { Entrega, EntregaDetalhe } from '@/lib/types';
 import { Colors, Fonts, Radius, Spacing } from '@/theme';
 
 interface Props {
-  entrega: Entrega;
+  entrega: Entrega | EntregaDetalhe;
   onPress?: () => void;
   onPressIn?: () => void;
   onHoverIn?: () => void;
@@ -16,6 +16,8 @@ interface Props {
 
 export function DeliveryCard({ entrega, onPress, onPressIn, onHoverIn, highlight }: Props) {
   const status = statusEntrega(entrega.status);
+  const clienteNome = (entrega as EntregaDetalhe).cliente_nome ?? null;
+  const dataHora = formatDataHoraCard(entrega.dt_cadastro);
 
   return (
     <Pressable
@@ -36,6 +38,19 @@ export function DeliveryCard({ entrega, onPress, onPressIn, onHoverIn, highlight
           </Text>
           <Badge label={status.label} color={status.color} />
         </View>
+        {clienteNome ? (
+          <View style={styles.clienteRow}>
+            <MaterialIcons name="person" size={14} color={Colors.textSecondary} />
+            <Text style={styles.clienteNome} numberOfLines={1}>
+              {clienteNome}
+            </Text>
+            <Text style={styles.dataHora}>{dataHora}</Text>
+          </View>
+        ) : (
+          <View style={styles.clienteRow}>
+            <Text style={styles.dataHora}>{dataHora}</Text>
+          </View>
+        )}
       </View>
 
       <View style={styles.route}>
@@ -94,6 +109,23 @@ const styles = StyleSheet.create({
     fontWeight: Fonts.bold,
     color: Colors.text,
     flexShrink: 1,
+  },
+  clienteRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 4,
+  },
+  clienteNome: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: Fonts.semibold,
+    color: Colors.textSecondary,
+  },
+  dataHora: {
+    fontSize: 12,
+    color: Colors.textMuted,
+    marginLeft: 'auto',
   },
   route: {
     gap: Spacing.xs,
