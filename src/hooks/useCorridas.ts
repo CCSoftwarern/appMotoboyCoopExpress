@@ -84,17 +84,33 @@ export function useEntrega(id: number) {
   const queryClient = useQueryClient();
   return useQuery({
     queryKey: keys.detalhe(id),
-    queryFn: () => fetchEntrega(client!, id),
-    enabled: !!client && id > 0,
-    // Detalhe reaproveita RPC entregas_motoboy_hoje (já traz cliente/operador) → abertura instantânea
-    placeholderData: () => {
-      // 1) tenta cache do detalhe já buscado
-      // 2) tenta lista Hoje (RPC) que já tem detalhe completo
-      // 3) fallback para listas antigas (sem cliente enriquecido)
+    queryFn: async () => {
+      // Usa direto o endereço do RPC sem buscar novamente no banco
       if (motoboy) {
         const hoje = queryClient.getQueryData<EntregaDetalhe[]>(keys.hoje(motoboy.id));
         const foundHoje = hoje?.find((e) => e.id === id);
         if (foundHoje) return foundHoje;
+        // também procura em qualquer cache de histórico RPC (paginado por datas)
+        const histCaches = queryClient.getQueriesData<EntregaDetalhe[]>({ queryKey: ['entregas', 'historico-rpc'] });
+        for (const [, data] of histCaches) {
+          const found = (data as EntregaDetalhe[] | undefined)?.find((e) => e.id === id);
+          if (found) return found;
+        }
+      }
+      return fetchEntrega(client!, id);
+    },
+    enabled: !!client && id > 0,
+    // Placeholder também reaproveita RPC para não piscar e manter endereço do RPC
+    placeholderData: () => {
+      if (motoboy) {
+        const hoje = queryClient.getQueryData<EntregaDetalhe[]>(keys.hoje(motoboy.id));
+        const foundHoje = hoje?.find((e) => e.id === id);
+        if (foundHoje) return foundHoje;
+        const histCaches = queryClient.getQueriesData<EntregaDetalhe[]>({ queryKey: ['entregas', 'historico-rpc'] });
+        for (const [, data] of histCaches) {
+          const found = (data as EntregaDetalhe[] | undefined)?.find((e) => e.id === id);
+          if (found) return found;
+        }
       }
       const listas = [
         queryClient.getQueryData<Entrega[]>(keys.disponiveis),
@@ -116,7 +132,7 @@ export function useEntrega(id: number) {
       }
       return undefined;
     },
-    staleTime: 15_000,
+    staleTime: 30_000,
     gcTime: 5 * 60_000,
   });
 }
