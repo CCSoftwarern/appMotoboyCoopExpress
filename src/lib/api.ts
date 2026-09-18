@@ -140,6 +140,23 @@ export async function fetchEntregasMotoboyHoje(
   return rows.map((r) => mapRpcToDetalhe(r));
 }
 
+export async function fetchEntregasMotoboyHistorico(
+  client: SupabaseClient,
+  p_dt1: string,
+  p_dt2: string,
+  p_id_motoboy: number,
+): Promise<EntregaDetalhe[]> {
+  const { data, error } = await client.rpc('entregas_motoboy_historico', {
+    p_dt1,
+    p_dt2,
+    p_id_motoboy,
+  });
+  if (error) throw error;
+  const rows = (data ?? []) as EntregasMotoboyHojeRow[];
+  // historico retorna mesma projeção da RPC hoje (nome_cliente, celular, etc.)
+  return rows.map((r) => mapRpcToDetalhe(r));
+}
+
 function formatEnderecoCadastro(p: {
   endereco: string | null;
   numero: number | null;
