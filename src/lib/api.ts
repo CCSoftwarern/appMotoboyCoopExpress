@@ -314,17 +314,25 @@ export async function uploadProva(
   uri: string,
 ): Promise<string> {
   let uploadUri = uri;
-  // Compressão rápida para foto/assinatura (reduz tempo de upload 60-70%)
+  // Compressão mais leve + skip se muito pequeno
   try {
-    const { manipulateAsync, SaveFormat } = await import('expo-image-manipulator');
-    const manip = await manipulateAsync(
-      uri,
-      [{ resize: { width: 1024 } }],
-      { compress: 0.7, format: SaveFormat.JPEG },
-    );
-    uploadUri = manip.uri;
+    const fs = await import('expo-file-system');
+    const info = await fs.getInfoAsync(uri);
+    if (!info.exists) throw new Error('arquivo não encontrado');
+    const size = (info as any).size ?? (info as any).length ?? 0;
+    if (size < 250 * 1024) {
+      uploadUri = uri;
+    } else {
+      const { manipulateAsync, SaveFormat } = await import('expo-image-manipulator');
+      const manip = await manipulateAsync(
+        uri,
+        [{ resize: { width: 800 } }],
+        { compress: 0.6, format: SaveFormat.JPEG },
+      );
+      uploadUri = manip.uri;
+    }
   } catch {
-    // fallback para uri original se manipulação falhar
+    // fallback
   }
   const ext = uploadUri.split('.').pop()?.split('?')[0] ?? 'jpg';
   const mime = ext === 'png' ? 'image/png' : 'image/jpeg';

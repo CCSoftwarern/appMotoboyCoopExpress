@@ -68,13 +68,22 @@ export function ProvaEntregaModal({ visible, onClose, onSubmit, submitting }: Pr
     }
   };
 
+  const getCoords = async (): Promise<{ lat: number | null; lng: number | null }> => {
+    try {
+      const loc = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      } as any);
+      return { lat: loc.coords.latitude, lng: loc.coords.longitude };
+    } catch {
+      return { lat: null, lng: null };
+    }
+  };
+
   const confirmar = async () => {
     let uri: string | null = null;
     if (modo === 'assinatura') {
       uri = await signatureRef.current?.getSignature() ?? null;
-      // agora opcional: se não houver assinatura, permite sem_prova
       if (!uri) {
-        // trata como sem_prova se usuário não desenhou
         onSubmitSemProva();
         return;
       }
@@ -84,16 +93,7 @@ export function ProvaEntregaModal({ visible, onClose, onSubmit, submitting }: Pr
       uri = null;
     }
 
-    let lat: number | null = null;
-    let lng: number | null = null;
-    try {
-      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Low });
-      lat = loc.coords.latitude;
-      lng = loc.coords.longitude;
-    } catch {
-      // sem permissão/localização — segue sem georreferência
-    }
-
+    const { lat, lng } = await getCoords();
     onSubmit({
       tipo: modo === 'sem_prova' ? 'sem_prova' : modo,
       arquivoUri: uri,
@@ -104,13 +104,7 @@ export function ProvaEntregaModal({ visible, onClose, onSubmit, submitting }: Pr
   };
 
   const onSubmitSemProva = async () => {
-    let lat: number | null = null;
-    let lng: number | null = null;
-    try {
-      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Low });
-      lat = loc.coords.latitude;
-      lng = loc.coords.longitude;
-    } catch {}
+    const { lat, lng } = await getCoords();
     onSubmit({
       tipo: 'sem_prova',
       arquivoUri: null,

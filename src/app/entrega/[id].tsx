@@ -113,11 +113,9 @@ export default function EntregaDetailScreen() {
 
   const onConfirmarProva = async (result: ProvaResult) => {
     if (!client) return;
-    // sem_prova permite encerrar sem arquivo
     if (result.tipo !== 'sem_prova' && !result.arquivoUri) return;
     setProvaSubmitting(true);
     try {
-      // Otimização: se sem_prova, pula upload (muito mais rápido)
       let publicUrl: string | null = null;
       if (result.tipo !== 'sem_prova' && result.arquivoUri) {
         publicUrl = await uploadProva(client, id, result.tipo as 'assinatura' | 'foto', result.arquivoUri);
@@ -127,11 +125,10 @@ export default function EntregaDetailScreen() {
         tipo: result.tipo as 'assinatura' | 'foto' | 'sem_prova',
         arquivoUrl: publicUrl,
         nomeRecebedor: result.nomeRecebedor,
-        lat: result.lat,
-        lng: result.lng,
+        lat: result.lat ?? null,
+        lng: result.lng ?? null,
       });
       setProvaVisible(false);
-      // invalidação otimista paralela, sem await sequencial
       void queryClient.invalidateQueries({ queryKey: ['entregas'] });
       void queryClient.invalidateQueries({ queryKey: ['wallet'] });
       void queryClient.invalidateQueries({ queryKey: ['entregas', 'detalhe', id] });
