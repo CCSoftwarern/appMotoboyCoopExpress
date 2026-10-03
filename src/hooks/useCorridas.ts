@@ -11,6 +11,7 @@ import {
   fetchEntrega,
   fetchEntregasMotoboyHoje,
   fetchHistorico,
+  fetchEntregasMotoboyHistorico,
   iniciarEntrega,
   recusarEntrega,
 } from '@/lib/api';
@@ -71,11 +72,29 @@ export function useEntregasMotoboyHoje() {
   const { client, motoboy } = useAuth();
   return useQuery({
     queryKey: keys.hoje(motoboy?.id ?? 0),
-    queryFn: () => fetchEntregasMotoboyHoje(client!, motoboy!.id),
+    queryFn: async () => {
+      const data = await fetchEntregasMotoboyHoje(client!, motoboy!.id);
+      try {
+        const { saveEntregasHoje } = await import('@/lib/offline-cache');
+        await saveEntregasHoje(data);
+      } catch {}
+      return data;
+    },
     enabled: !!client && !!motoboy,
     refetchInterval: 10_000,
     refetchOnWindowFocus: true,
     staleTime: 5_000,
+  });
+}
+
+export function useEntregasHojeOffline() {
+  return useQuery({
+    queryKey: ['entregas', 'hoje', 'offline'],
+    queryFn: async () => {
+      const { getEntregasHoje } = await import('@/lib/offline-cache');
+      return (await getEntregasHoje()) ?? [];
+    },
+    staleTime: 5 * 60 * 1000,
   });
 }
 

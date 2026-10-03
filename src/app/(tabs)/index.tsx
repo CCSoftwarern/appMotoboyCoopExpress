@@ -11,32 +11,34 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { DeliveryCard } from "@/components/delivery-card";
 import { EmptyState, Loading, SectionTitle } from "@/components/ui";
-import { useEntregasMotoboyHoje, usePrefetchEntrega, useRealtimeCorridas } from "@/hooks/useCorridas";
+import { useEntregasHojeOffline, useEntregasMotoboyHoje, usePrefetchEntrega, useRealtimeCorridas } from "@/hooks/useCorridas";
+import { useNetwork } from "@/hooks/useNetwork";
 import { Colors, Fonts, Spacing } from "@/theme";
 
 export default function CorridasScreen() {
   const router = useRouter();
   useRealtimeCorridas();
 
-  const hojeRpc = useEntregasMotoboyHoje();
-
-  const refreshing = hojeRpc.isFetching;
-
-  const onRefresh = useCallback(() => {
-    void hojeRpc.refetch();
-  }, [hojeRpc]);
-
-  const loading = hojeRpc.isLoading;
+  const online = useNetwork();
+  const hojeOnlineQuery = useEntregasMotoboyHoje();
+  const hojeOfflineQuery = useEntregasHojeOffline();
   const prefetch = usePrefetchEntrega();
 
   const open = (id: number) => router.push(`/entrega/${id}` as never);
+
+  const entregas = online ? (hojeOnlineQuery.data ?? []) : (hojeOfflineQuery.data ?? hojeOnlineQuery.data ?? []);
+  const loading = online ? hojeOnlineQuery.isLoading : hojeOfflineQuery.isLoading && !entregas.length;
+  const refreshing = online ? hojeOnlineQuery.isFetching : false;
+  const onRefresh = useCallback(() => {
+    if (online) hojeOnlineQuery.refetch();
+  }, [online, hojeOnlineQuery]);
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <View style={styles.header}>
         <Text style={styles.title}>Corridas</Text>
         <Text style={styles.subtitle}>
-          Aceite corridas e acompanhe as entregas em andamento.
+          Aceite corridas e acompanhe as entregas em andamento.{!online && " (Offline)"}
         </Text>
       </View>
 
@@ -49,9 +51,9 @@ export default function CorridasScreen() {
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
           }
         >
-          <SectionTitle>Minhas de Hoje</SectionTitle>
-          {hojeRpc.data?.length ? (
-            hojeRpc.data.map((e) => (
+          <SectionTitle>Minhas de Hoje{!online && " · Cache"}</SectionTitle>
+          {entregas.length ? (
+            entregas.map((e: any) => (
               <DeliveryCard
                 key={e.id}
                 entrega={e}
@@ -63,11 +65,11 @@ export default function CorridasScreen() {
             ))
           ) : (
             <EmptyState
-              title={hojeRpc.isLoading ? "Carregando..." : "Nenhuma entrega hoje"}
-              subtitle="Entregas do RPC entregas_motoboy_hoje (já com cliente/operador)."
+              title={online && hojeOnlineQuery.isLoading ? "Carregando..." : "Nenhuma entrega hoje"}
+              subtitle="Entregas do RPC entregas_motoboy_hoje (com cliente/operador)."
             />
           )}
-          <Text style={styles.hint}>Histórico completo em “Histórico” ao lado de Corridas.</Text>
+          <Text style={styles.hint}>Histórico completo na aba Histórico.</Text>
         </ScrollView>
       )}
     </SafeAreaView>

@@ -49,7 +49,18 @@ export default function HistoricoScreen() {
 
   const query = useQuery({
     queryKey: ['entregas', 'historico-rpc', applied.p_dt1, applied.p_dt2, idMotoboy],
-    queryFn: () => fetchEntregasMotoboyHistorico(client!, applied.p_dt1, applied.p_dt2, idMotoboy),
+    queryFn: async () => {
+      const data = await fetchEntregasMotoboyHistorico(client!, applied.p_dt1, applied.p_dt2, idMotoboy);
+      try {
+        const { mapRpcToDetalhe } = await import('@/lib/api');
+        const mapped = data.map((d: any) => mapRpcToDetalhe(d));
+        const { saveEntregasHistorico } = await import('@/lib/offline-cache');
+        await saveEntregasHistorico(mapped as any[], applied.p_dt1, applied.p_dt2);
+        return mapped;
+      } catch {
+        return data;
+      }
+    },
     enabled: !!client && !!motoboy && !!applied.p_dt1 && !!applied.p_dt2,
   });
 

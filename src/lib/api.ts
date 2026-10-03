@@ -83,7 +83,7 @@ export interface EntregasMotoboyHojeRow {
   [k: string]: unknown;
 }
 
-function mapRpcToDetalhe(row: EntregasMotoboyHojeRow, fallback?: Partial<Entrega>): EntregaDetalhe {
+      export function mapRpcToDetalhe(row: EntregasMotoboyHojeRow, fallback?: Partial<Entrega>): EntregaDetalhe {
   const base = (fallback ?? {}) as Entrega;
   return {
     // campos base de Entrega (mantém fallback quando RPC não traz)
