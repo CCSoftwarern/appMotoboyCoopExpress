@@ -27,7 +27,6 @@
       "googleServicesFile": "./google-services.json",
       "softwareKeyboardLayoutMode": "pan",
       "predictiveBackGestureEnabled": false,
-      "edgeToEdgeEnabled": true,
       "permissions": [
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION",
@@ -68,7 +67,8 @@
         {
           "locationWhenInUsePermission": "A CoopExpress usa sua localização para registrar a prova de entrega."
         }
-      ]
+      ],
+      "expo-image"
     ],
     "experiments": {
       "typedRoutes": true,
