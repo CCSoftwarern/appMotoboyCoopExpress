@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import NetInfo from '@react-native-community/netinfo';
 
 export function useNetwork() {

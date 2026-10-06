@@ -21,6 +21,7 @@ import {
   useEntrega,
   useRecusarEntrega,
 } from '@/hooks/useCorridas';
+import { useNetwork } from '@/hooks/useNetwork';
 import { finalizarEntrega, uploadProva } from '@/lib/api';
 import { formatCurrency, formatDate, statusEntrega } from '@/lib/format';
 import { Colors, Fonts, Spacing } from '@/theme';
@@ -32,7 +33,9 @@ export default function EntregaDetailScreen() {
   const queryClient = useQueryClient();
   const { client } = useAuth();
 
-  const { data: entrega, isLoading, error } = useEntrega(id);
+  const { data: entrega, isLoading, error, isFetching } = useEntrega(id);
+  const online = useNetwork();
+  const isOfflineError = error instanceof Error && error.message === 'offline';
 
   const aceitar = useAceitarEntrega();
   const [aceitando, setAceitando] = useState(false);
@@ -43,19 +46,25 @@ export default function EntregaDetailScreen() {
   const [provaVisible, setProvaVisible] = useState(false);
   const [provaSubmitting, setProvaSubmitting] = useState(false);
 
-  if (isLoading || !entrega) {
+  if (!entrega && (isLoading || (!error && isFetching))) {
     return (
       <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-        {error ? (
-          <View style={styles.center}>
-            <Text style={styles.errorText}>
-              Não foi possível carregar a entrega.
-            </Text>
-            <Button label="Voltar" variant="ghost" onPress={() => router.back()} />
-          </View>
-        ) : (
-          <Loading />
-        )}
+        <Loading />
+      </SafeAreaView>
+    );
+  }
+
+  if (!entrega) {
+    return (
+      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+        <View style={styles.center}>
+          <Text style={styles.errorText}>
+            {!online || isOfflineError
+              ? 'Sem conexão e esta entrega não está salva no aparelho.'
+              : 'Não foi possível carregar a entrega.'}
+          </Text>
+          <Button label="Voltar" variant="ghost" onPress={() => router.back()} />
+        </View>
       </SafeAreaView>
     );
   }

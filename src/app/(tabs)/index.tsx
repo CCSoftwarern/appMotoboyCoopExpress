@@ -1,5 +1,5 @@
 import { useRouter } from "expo-router";
-import { useCallback } from "react";
+import { useCallback, useEffect } from "react";
 import {
   RefreshControl,
   ScrollView,
@@ -7,6 +7,7 @@ import {
   Text,
   View,
 } from "react-native";
+import { useQueryClient } from "@tanstack/react-query";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { DeliveryCard } from "@/components/delivery-card";
@@ -23,15 +24,29 @@ export default function CorridasScreen() {
   const hojeOnlineQuery = useEntregasMotoboyHoje();
   const hojeOfflineQuery = useEntregasHojeOffline();
   const prefetch = usePrefetchEntrega();
+  const queryClient = useQueryClient();
+
+  // quando o RPC online atualiza, recarrega o cache local (offline)
+  useEffect(() => {
+    if (hojeOnlineQuery.dataUpdatedAt) {
+      void queryClient.invalidateQueries({ queryKey: ["entregas", "hoje", "offline"] });
+    }
+  }, [hojeOnlineQuery.dataUpdatedAt, queryClient]);
 
   const open = (id: number) => router.push(`/entrega/${id}` as never);
 
-  const entregas = online ? (hojeOnlineQuery.data ?? []) : (hojeOfflineQuery.data ?? hojeOnlineQuery.data ?? []);
-  const loading = online ? hojeOnlineQuery.isLoading : hojeOfflineQuery.isLoading && !entregas.length;
+  const offlineList = hojeOfflineQuery.data ?? [];
+  const entregas = online
+    ? (hojeOnlineQuery.data ?? offlineList)
+    : (offlineList.length ? offlineList : (hojeOnlineQuery.data ?? []));
+  const loading = online
+    ? hojeOnlineQuery.isLoading && !entregas.length
+    : hojeOfflineQuery.isLoading && !entregas.length;
   const refreshing = online ? hojeOnlineQuery.isFetching : false;
   const onRefresh = useCallback(() => {
     if (online) hojeOnlineQuery.refetch();
-  }, [online, hojeOnlineQuery]);
+    else void hojeOfflineQuery.refetch();
+  }, [online, hojeOnlineQuery, hojeOfflineQuery]);
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>

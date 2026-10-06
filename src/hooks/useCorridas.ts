@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { onlineManager, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { AppState } from 'react-native';
 
@@ -11,7 +11,6 @@ import {
   fetchEntrega,
   fetchEntregasMotoboyHoje,
   fetchHistorico,
-  fetchEntregasMotoboyHistorico,
   iniciarEntrega,
   recusarEntrega,
 } from '@/lib/api';
@@ -31,7 +30,7 @@ export function useDisponiveis() {
     queryKey: keys.disponiveis,
     queryFn: () => fetchDisponiveis(client!),
     enabled: !!client,
-    refetchInterval: 10_000,
+    refetchInterval: () => (onlineManager.isOnline() ? 10_000 : false),
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
@@ -48,7 +47,7 @@ export function useAtivas() {
       return list;
     },
     enabled: !!client && !!motoboy,
-    refetchInterval: 10_000,
+    refetchInterval: () => (onlineManager.isOnline() ? 10_000 : false),
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
@@ -81,7 +80,7 @@ export function useEntregasMotoboyHoje() {
       return data;
     },
     enabled: !!client && !!motoboy,
-    refetchInterval: 10_000,
+    refetchInterval: () => (onlineManager.isOnline() ? 10_000 : false),
     refetchOnWindowFocus: true,
     staleTime: 5_000,
   });
@@ -94,7 +93,10 @@ export function useEntregasHojeOffline() {
       const { getEntregasHoje } = await import('@/lib/offline-cache');
       return (await getEntregasHoje()) ?? [];
     },
-    staleTime: 5 * 60 * 1000,
+    staleTime: 10_000,
+    gcTime: 30 * 60_000,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
   });
 }
 
@@ -104,21 +106,36 @@ export function useEntrega(id: number) {
   return useQuery({
     queryKey: keys.detalhe(id),
     queryFn: async () => {
-      // Usa direto o endereço do RPC sem buscar novamente no banco
+      // 1) cache em memoria (RPC hoje/historico) — rapido
       if (motoboy) {
         const hoje = queryClient.getQueryData<EntregaDetalhe[]>(keys.hoje(motoboy.id));
         const foundHoje = hoje?.find((e) => e.id === id);
         if (foundHoje) return foundHoje;
-        // também procura em qualquer cache de histórico RPC (paginado por datas)
         const histCaches = queryClient.getQueriesData<EntregaDetalhe[]>({ queryKey: ['entregas', 'historico-rpc'] });
         for (const [, data] of histCaches) {
           const found = (data as EntregaDetalhe[] | undefined)?.find((e) => e.id === id);
           if (found) return found;
         }
       }
+      // 2) cache persistido no aparelho (funciona offline)
+      const { getEntregaOffline } = await import('@/lib/offline-cache');
+      const offline = await getEntregaOffline(id);
+      if (offline) return offline as EntregaDetalhe;
+      // 3) so vai a rede se tiver conexao
+      let online = true;
+      try {
+        const NetInfo = (await import('@react-native-community/netinfo')).default;
+        const s = await NetInfo.fetch();
+        online = !!s.isConnected && s.isInternetReachable !== false;
+      } catch {}
+      if (!online) throw new Error('offline');
       return fetchEntrega(client!, id);
     },
     enabled: !!client && id > 0,
+    retry: (failureCount, err) => {
+      if (err instanceof Error && err.message === 'offline') return false;
+      return failureCount < 2;
+    },
     // Placeholder também reaproveita RPC para não piscar e manter endereço do RPC
     placeholderData: () => {
       if (motoboy) {
@@ -161,16 +178,32 @@ export function usePrefetchEntrega() {
   const queryClient = useQueryClient();
   return (id: number) => {
     if (!client || !id) return;
-    // se já está no cache Hoje, não precisa prefetch
+    // se ja esta no cache Hoje, nao precisa prefetch
     if (motoboy) {
       const hoje = queryClient.getQueryData<EntregaDetalhe[]>(keys.hoje(motoboy.id));
       if (hoje?.some((e) => e.id === id)) return;
     }
-    void queryClient.prefetchQuery({
-      queryKey: keys.detalhe(id),
-      queryFn: () => fetchEntrega(client, id),
-      staleTime: 15_000,
-    });
+    // offline: nao tenta rede (evita deixar erro no cache)
+    void (async () => {
+      let online = true;
+      try {
+        const NetInfo = (await import('@react-native-community/netinfo')).default;
+        const st = await NetInfo.fetch();
+        online = !!st.isConnected && st.isInternetReachable !== false;
+      } catch {}
+      if (!online) return;
+      const { getEntregaOffline } = await import('@/lib/offline-cache');
+      const off = await getEntregaOffline(id);
+      if (off) {
+        queryClient.setQueryData(keys.detalhe(id), off);
+        return;
+      }
+      await queryClient.prefetchQuery({
+        queryKey: keys.detalhe(id),
+        queryFn: () => fetchEntrega(client, id),
+        staleTime: 15_000,
+      });
+    })().catch(() => {});
   };
 }
 

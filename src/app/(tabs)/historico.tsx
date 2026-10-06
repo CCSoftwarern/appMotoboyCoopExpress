@@ -50,18 +50,24 @@ export default function HistoricoScreen() {
   const query = useQuery({
     queryKey: ['entregas', 'historico-rpc', applied.p_dt1, applied.p_dt2, idMotoboy],
     queryFn: async () => {
-      const data = await fetchEntregasMotoboyHistorico(client!, applied.p_dt1, applied.p_dt2, idMotoboy);
       try {
-        const { mapRpcToDetalhe } = await import('@/lib/api');
-        const mapped = data.map((d: any) => mapRpcToDetalhe(d));
-        const { saveEntregasHistorico } = await import('@/lib/offline-cache');
-        await saveEntregasHistorico(mapped as any[], applied.p_dt1, applied.p_dt2);
-        return mapped;
-      } catch {
+        const data = await fetchEntregasMotoboyHistorico(client!, applied.p_dt1, applied.p_dt2, idMotoboy);
+        try {
+          const { saveEntregasHistorico: save } = await import('@/lib/offline-cache');
+          await save(data as any[], applied.p_dt1, applied.p_dt2);
+        } catch {}
         return data;
+      } catch (err) {
+        const { getEntregasHistorico: load } = await import('@/lib/offline-cache');
+        const cached = await load(applied.p_dt1, applied.p_dt2);
+        if (cached && Array.isArray(cached) && cached.length) return cached;
+        throw err;
       }
     },
     enabled: !!client && !!motoboy && !!applied.p_dt1 && !!applied.p_dt2,
+    retry: (failureCount, err) =>
+      !(err instanceof Error && (err.message === 'offline' || /fetch|network/i.test(err.message))) &&
+      failureCount < 1,
   });
 
   const onBuscar = useCallback(() => {
